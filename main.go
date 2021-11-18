@@ -15,6 +15,7 @@ var (
 
 func main() {
 	flag.Parse()
+	log.Printf("SYSTEM %s Start: \nAddress: %s\nKafka Address: %s GroupId: %s\n", *name, *addr, *kfkAddr, *groupId)
 	hub := newHub()
 	go hub.run()
 	kfkClient := InitKfaClient(hub)

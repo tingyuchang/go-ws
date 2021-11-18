@@ -25,7 +25,7 @@ func (c *KFKClient) Produce(data []byte) (err error){
 		kafka.Message{Value: data},
 	)
 	if err != nil {
-		log.Fatal("failed to write messages:", err)
+		log.Println("failed to write messages:", err)
 		return
 	}
 
@@ -35,7 +35,7 @@ func (c *KFKClient) Produce(data []byte) (err error){
 
 func (c *KFKClient) Consume()  {
 	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:9092"},
+		Brokers:   []string{*kfkAddr},
 		GroupID:   *groupId,
 		Topic:     topic,
 		MinBytes:  1e3, // 1KB
@@ -55,14 +55,14 @@ func (c *KFKClient) Consume()  {
 	}
 
 	if err := r.Close(); err != nil {
-		log.Fatal("failed to close reader:", err)
+		log.Println("failed to close reader:", err)
 	}
 }
 
 func InitKfaClient(hub *Hub)*KFKClient {
 	conn, err := kafka.DialLeader(context.Background(), "tcp", *kfkAddr, topic, partition)
 	if err != nil {
-		log.Fatal("Init Kafka client fail", err)
+		log.Println("Init Kafka client fail", err)
 		return nil
 	}
 	client := &KFKClient{conn: conn, hub: hub}
