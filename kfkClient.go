@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/segmentio/kafka-go"
 	"log"
 	"time"
@@ -16,19 +15,12 @@ var (
 type KFKClient struct {
 	// The Kafaka connection.
 	conn *kafka.Conn
+	// Websocket Hub
+	hub *Hub
 }
 
 
 func (c *KFKClient) Produce(data []byte) (err error){
-	if err != nil {
-		log.Fatal("failed to dial leader:", err)
-	}
-
-	err = c.conn.SetWriteDeadline(time.Now().Add(10*time.Second))
-	if err != nil {
-		log.Fatal("set dead line fail", err)
-		return
-	}
 	_, err = c.conn.WriteMessages(
 		kafka.Message{Value: data},
 	)
@@ -37,54 +29,43 @@ func (c *KFKClient) Produce(data []byte) (err error){
 		return
 	}
 
-	//if err := c.conn.Close(); err != nil {
-	//	log.Fatal("failed to close writer:", err)
-	//	return
-	//}
 	return err
 
 }
 
-func (c *KFKClient) Consume()(err error)  {
-	if err != nil {
-		log.Fatal("failed to dial leader:", err)
-	}
+func (c *KFKClient) Consume()  {
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:   []string{"localhost:9092"},
+		GroupID:   *groupId,
+		Topic:     topic,
+		MinBytes:  1e3, // 1KB
+		MaxBytes:  10e6, // 10MB
+		MaxWait: 500*time.Millisecond,
+		//PartitionWatchInterval: 1000 * time.Microsecond,
+		//HeartbeatInterval: 100 * time.Microsecond,
+	})
 
-	err = c.conn.SetReadDeadline(time.Now().Add(10*time.Second))
-	if err != nil {
-		log.Fatal("set dead line fail", err)
-		return
-	}
-	batch := c.conn.ReadBatch(10e3, 1e6) // fetch 10KB min, 1MB max
-
-	b := make([]byte, 10e3) // 10KB max per message
 	for {
-		n, err := batch.Read(b)
+		m, err := r.ReadMessage(context.Background())
 		if err != nil {
 			break
 		}
-		fmt.Println(string(b[:n]))
+		c.hub.broadcast <- m.Value
+		//fmt.Printf("message at topic/partition/offset %v/%v/%v: %s = %s\n", m.Topic, m.Partition, m.Offset, string(m.Key), string(m.Value))
 	}
 
-	if err = batch.Close(); err != nil {
-		log.Fatal("failed to close batch:", err)
-		return err
+	if err := r.Close(); err != nil {
+		log.Fatal("failed to close reader:", err)
 	}
-
-	if err = c.conn.Close(); err != nil {
-		log.Fatal("failed to close connection:", err)
-		return err
-	}
-	return err
 }
 
-func InitKfaClient()*KFKClient {
-	conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
+func InitKfaClient(hub *Hub)*KFKClient {
+	conn, err := kafka.DialLeader(context.Background(), "tcp", *kfkAddr, topic, partition)
 	if err != nil {
-		log.Fatal("Init Kafaka client fail", err)
+		log.Fatal("Init Kafka client fail", err)
 		return nil
 	}
-	client := &KFKClient{conn: conn}
+	client := &KFKClient{conn: conn, hub: hub}
 
 	return client
 }
